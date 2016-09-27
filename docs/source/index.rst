@@ -67,6 +67,7 @@ Contents
    :maxdepth: 2
 
    architecture
+   interactions
 
 Indices and tables
 ==================
