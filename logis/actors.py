@@ -1,6 +1,10 @@
 from core import register_element, AgentBase
 
 
+class IncompatibleTaskError(Exception):
+    pass
+
+
 @register_element
 class Actor(AgentBase):
     """
@@ -23,9 +27,16 @@ class Actor(AgentBase):
         return retdict
 
     @classmethod
-    def decode(cls, kwargs):
-        retobj = super(Actor, cls).decode(kwargs)
+    def decode(cls, internal_id, kwargs):
+        retobj = super(Actor, cls).decode(internal_id, kwargs)
         retobj.name = kwargs['name']
         retobj.email = kwargs['email']
         retobj.phone_number = kwargs['phone_number']
         return retobj
+
+    def assign_to(self, task):
+        if not self.is_busy(task.start_time, task.stop_time):
+            self.tasks_assigned_to.append(task)
+            self.tasks_assigned_to.sort(key=lambda _task: _task.start_time)
+        else:
+            raise IncompatibleTaskError("This task conflicts with tasks already assigned to this actor")
