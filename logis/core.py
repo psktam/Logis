@@ -55,9 +55,10 @@ def decode(serialization):
     :param serialization:
     :return: Logis object
     """
-    type_name = serialization['type']
+    type_name = serialization['type_name']
     kwargs = serialization['kwargs']
-    return ELEMENTS[type_name].decode(kwargs)
+    return ELEMENTS[type_name].decode(internal_id=serialization['internal_id'],
+                                      kwargs=kwargs)
 
 
 @register_element
@@ -100,12 +101,13 @@ class BaseLogisObject(object):
 
         :return:
         """
-        return dict(type=self.type_name,
-                    kwargs=dict(internal_id=self.internal_id))
+        return dict(type_name=self.type_name,
+                    internal_id=self.internal_id,
+                    kwargs={})
 
     @classmethod
-    def decode(cls, kwargs):
-        return cls(internal_id=kwargs['internal_id'])
+    def decode(cls, internal_id, kwargs):
+        return cls(internal_id=internal_id)
 
 
 @register_element
@@ -136,7 +138,7 @@ class AgentBase(BaseLogisObject):
             max_start = max(task.start_time, start_time)
             min_end = min(task.stop_time, stop_time)
 
-            if min_end < max_start:
+            if max_start < min_end:
                 retlist.append(task)
         return retlist
 
@@ -151,12 +153,11 @@ class AgentBase(BaseLogisObject):
         retdict = super(AgentBase, self).serialize()
         # The tasks_assigned_to is a list of LogisObjects, so we need to invoke their serializations as well.
         serialized_list = [logis_task.serialize() for logis_task in self.tasks_assigned_to]
-        retdict['kwargs'] = dict(internal_id=self.internal_id, tasks_assigned_to=serialized_list)
+        retdict['kwargs']['tasks_assigned_to'] = serialized_list
         return retdict
 
     @classmethod
-    def decode(cls, kwargs):
-        internal_id = kwargs['internal_id']
+    def decode(cls, internal_id, kwargs):
         task_list = kwargs['tasks_assigned_to']
         task_list = [decode(task) for task in task_list]
 
