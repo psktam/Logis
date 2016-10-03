@@ -34,6 +34,10 @@ And this is the preferred way of creating and registering new elements.
 ELEMENTS = {}
 
 
+class IncompatibleTaskError(Exception):
+    pass
+
+
 def register_element(elem):
     """
     This allows you to make an element available for serialization/decoding. If a class with the type_name you are
@@ -166,3 +170,10 @@ class AgentBase(BaseLogisObject):
         retobj.tasks_assigned_to = task_list
 
         return retobj
+
+    def assign_to(self, task):
+        if not self.is_busy(task.start_time, task.stop_time):
+            self.tasks_assigned_to.append(task)
+            self.tasks_assigned_to.sort(key=lambda _task: _task.start_time)
+        else:
+            raise IncompatibleTaskError("This task conflicts with tasks already assigned to this actor")
