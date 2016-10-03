@@ -1,15 +1,50 @@
+"""
+This module contains the base definitions for the models that are to be implemented by Logis, as well as the decoding
+mechanism by which Logis objects will be reconstructed from stored values on the database.
+
+The way serialization/decoding works is thus: all LogisObjects must store their constructors in the `ELEMENTS`
+dictionary defined in this module, keyed by an class-level property called `type_name`. When you define a new
+model/element that must be storable/fetchable from the database, you must decorate your class with the
+`register_element` decorator. This will tell Logis how it should interpret your object.
+
+With this `register_element` decorator, the following code:
+
+..code-block::python
+
+    import core
+
+    class NewObject(core.BaseLogisObject):
+        type_name = 'some_generic_object'
+
+    core.ELEMENTS[NewObject.type_name] = NewObject
+
+Becomes this:
+
+..code-block::python
+
+    import core
+
+    @core.register_element
+    class NewObject(core.BaseLogisObject):
+        type_name = 'some_generic_object'
+
+And this is the preferred way of creating and registering new elements.
+"""
+
 ELEMENTS = {}
 
 
 def register_element(elem):
     """
-    This allows you to make an element available for serialization/decoding
+    This allows you to make an element available for serialization/decoding. If a class with the type_name you are
+    trying to register already exists, it will complain.
+
     :param elem:
     :return:
     """
-    if elem.name in ELEMENTS.keys():
-        raise ValueError("An element with the name {} already exists".format(elem.name))
-    ELEMENTS[elem.name] = elem
+    if elem.type_name in ELEMENTS.keys():
+        raise ValueError("An element with the name {} already exists".format(elem.type_name))
+    ELEMENTS[elem.type_name] = elem
     return elem
 
 
@@ -32,9 +67,12 @@ class BaseLogisObject(object):
     this is that it adds an internal id, which should be unique to every object.
 
     :param internal_id: string indicating uniqueness of element
+
+    In addition to the constructor, there should be a class-level definition of `type_name`. This will help us in
+    decoding Logis objects from database storage.
     """
 
-    name = 'base_object'
+    type_name = 'base_object'
 
     def __init__(self, internal_id):
         self._internal_id = internal_id
@@ -62,7 +100,7 @@ class BaseLogisObject(object):
 
         :return:
         """
-        return dict(type=self.name,
+        return dict(type=self.type_name,
                     kwargs=dict(internal_id=self.internal_id))
 
     @classmethod
@@ -71,17 +109,19 @@ class BaseLogisObject(object):
 
 
 @register_element
-class PhysicalObjectBase(BaseLogisObject):
+class AgentBase(BaseLogisObject):
     """
     This base class is used to help define Actors and Assets, since with both, you need to make sure that whenever
     they're assigned to a task, that they don't conflict with what they're already assigned to.
     """
 
-    name = 'physical_object_base'
+    type_name = 'physical_object_base'
 
-    def __init__(self, internal_id, tasks_assigned_to):
-        super(PhysicalObjectBase, self).__init__(internal_id)
-        self.tasks_assigned_to = tasks_assigned_to  # Should be an internal list of tasks already assigned to
+    def __init__(self, internal_id):
+        super(AgentBase, self).__init__(internal_id)
+        # Upon invocation of the constructor method, the Agent should not already have tasks assigned to it. That is
+        # what the decoding method is for.
+        self.tasks_assigned_to = []
 
     def tasks_during(self, start_time, stop_time):
         """
@@ -108,7 +148,7 @@ class PhysicalObjectBase(BaseLogisObject):
         return len(self.tasks_during(start_time, stop_time)) != 0
 
     def serialize(self):
-        retdict = super(PhysicalObjectBase, self).serialize()
+        retdict = super(AgentBase, self).serialize()
         # The tasks_assigned_to is a list of LogisObjects, so we need to invoke their serializations as well.
         serialized_list = [logis_task.serialize() for logis_task in self.tasks_assigned_to]
         retdict['kwargs'] = dict(internal_id=self.internal_id, tasks_assigned_to=serialized_list)
@@ -116,8 +156,12 @@ class PhysicalObjectBase(BaseLogisObject):
 
     @classmethod
     def decode(cls, kwargs):
-        id = kwargs['internal_id']
+        internal_id = kwargs['internal_id']
         task_list = kwargs['tasks_assigned_to']
         task_list = [decode(task) for task in task_list]
 
-        return cls(id, task_list)
+        retobj = cls.__new__(cls)
+        retobj._internal_id = internal_id
+        retobj.tasks_assigned_to = task_list
+
+        return retobj
